@@ -1,5 +1,4 @@
 # EmoStream: Real-time Emoji Processing System
-# RR-Team-15-emostream-concurrent-emoji-broadcast-over-event-driven-architecture
 
 A high-performance, event-driven system for concurrent emoji broadcasting and processing using Kafka and Flask.
 
