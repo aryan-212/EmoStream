@@ -7,11 +7,40 @@ import random  # Missing import
 
 app = Flask(__name__)
 
-# Initialize the Kafka producer
-producer = KafkaProducer(
-    bootstrap_servers=['localhost:9092'],
-    value_serializer=lambda x: json.dumps(x).encode('utf-8')
-)
+@app.route('/') 
+def health_check():
+    """Health check endpoint for Docker."""
+    return jsonify({"status": "healthy", "service": "EmoStream API"}), 200
+
+import os
+
+# Initialize the Kafka producer with retry logic
+kafka_broker = os.getenv('KAFKA_BROKER', 'localhost:9092')
+
+def create_kafka_producer():
+    """Create Kafka producer with retry logic."""
+    max_retries = 30
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"Attempting to connect to Kafka at {kafka_broker} (attempt {attempt + 1}/{max_retries})")
+            producer = KafkaProducer(
+                bootstrap_servers=[kafka_broker],
+                value_serializer=lambda x: json.dumps(x).encode('utf-8')
+            )
+            print("Successfully connected to Kafka!")
+            return producer
+        except Exception as e:
+            print(f"Failed to connect to Kafka (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                print(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            else:
+                print("Max retries reached. Exiting.")
+                raise
+
+producer = create_kafka_producer()
 
 # A flag to manage the flushing thread
 flushing = True

@@ -1,5 +1,7 @@
 import json
 import threading
+import os
+import time
 from kafka import KafkaConsumer
 import socket
 
@@ -9,16 +11,40 @@ class Subscriber:
         self.subscriber_id = subscriber_id
         self.port = port
         self.topic = f'subscriber_{cluster_id}_{subscriber_id}'
-        self.consumer = KafkaConsumer(
-            self.topic,
-            bootstrap_servers=['localhost:9092'],
-            value_deserializer=lambda x: json.loads(x.decode('utf-8'))
-        )
+        self.kafka_broker = os.getenv('KAFKA_BROKER', 'localhost:9092')
+        self.consumer = None
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind(('0.0.0.0', self.port))
         self.server_socket.listen(1)  # Only one client connection allowed
         self.active = True
         self.client_socket = None
+        
+        # Initialize Kafka consumer with retry logic
+        self._init_kafka_consumer()
+    
+    def _init_kafka_consumer(self):
+        """Initialize Kafka consumer with retry logic."""
+        max_retries = 30
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"Subscriber {self.cluster_id}_{self.subscriber_id}: Attempting to connect to Kafka at {self.kafka_broker} (attempt {attempt + 1}/{max_retries})")
+                self.consumer = KafkaConsumer(
+                    self.topic,
+                    bootstrap_servers=[self.kafka_broker],
+                    value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+                )
+                print(f"Subscriber {self.cluster_id}_{self.subscriber_id}: Successfully connected to Kafka!")
+                return
+            except Exception as e:
+                print(f"Subscriber {self.cluster_id}_{self.subscriber_id}: Failed to connect to Kafka (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    print(f"Subscriber {self.cluster_id}_{self.subscriber_id}: Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    print(f"Subscriber {self.cluster_id}_{self.subscriber_id}: Max retries reached. Exiting.")
+                    raise
 
     def start(self):
         print(f"Subscriber {self.cluster_id}_{self.subscriber_id} listening on port {self.port}")

@@ -1,0 +1,78 @@
+services:
+  zookeeper:
+    image: zookeeper:3.8.1
+    hostname: zookeeper
+    container_name: zookeeper
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=0.0.0.0:2888:3888;2181
+    ports:
+      - "2181:2181"
+      - "2888:2888"
+      - "3888:3888"
+
+  kafka:
+    image: confluentinc/cp-kafka:6.2.12
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+
+  app:
+    build: .
+    container_name: emostream-app
+    ports:
+      - "5000:5000"
+    environment:
+      KAFKA_BROKER: kafka:29092
+      FLASK_APP: src/app.py
+      FLASK_ENV: development
+    depends_on:
+      - kafka
+    volumes:
+      - ./logs:/app/logs
+
+  subscriber:
+    build: .
+    container_name: emostream-subscriber
+    command: ["python", "src/subscriber.py"]
+    environment:
+      KAFKA_BROKER: kafka:29092
+    depends_on:
+      - kafka
+    ports:
+      - "6000-6008:6000-6008"
+    volumes:
+      - ./logs:/app/logs
+
+  test:
+    build: .
+    container_name: emostream-test
+    command: ["python", "test/test_api.py"]
+    environment:
+      KAFKA_BROKER: kafka:29092
+    depends_on:
+      - app
+      - kafka
+    volumes:
+      - ./test:/app/test
+      - ./logs:/app/logs
+
+networks:
+  default:
+    name: emostream-network
